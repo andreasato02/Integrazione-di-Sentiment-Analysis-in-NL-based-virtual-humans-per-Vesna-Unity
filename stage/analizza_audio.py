@@ -1,6 +1,8 @@
 import sys
 from transformers import pipeline
 
+from calibrazione_voce import calibra as calibra_voce, DISPONIBILE as CALIBRAZIONE_DISPONIBILE
+
 AUDIO_MODEL = "hughlan1214/Speech_Emotion_Recognition_wav2vec2-large-xlsr-53_240304_SER_fine-tuned2.0"
 TEXT_MODEL = "MilaNLProc/feel-it-italian-emotion"
 
@@ -80,13 +82,15 @@ def fondi(emo_testo, emo_audio, peso_audio=0.6, modo="semplice"):
     }
 
 
-def analizza(percorso, peso_audio=0.6, modo="semplice"):
+def analizza(percorso, peso_audio=0.6, modo="semplice", calibra=True):
     testo = asr(
         percorso, generate_kwargs={"language": "italian", "task": "transcribe"}
     )["text"].strip()
 
     emo_testo = normalizza(text_clf(testo)) if testo else {}
-    emo_audio = normalizza(audio_clf(percorso))
+    emo_audio_grezza = normalizza(audio_clf(percorso))
+    # Corregge la distorsione del modello vocale verso "joy" (se calibrazione.npz c'e')
+    emo_audio = calibra_voce(emo_audio_grezza) if calibra else emo_audio_grezza
 
     combinato = fondi(emo_testo, emo_audio, peso_audio, modo)
 
@@ -94,6 +98,8 @@ def analizza(percorso, peso_audio=0.6, modo="semplice"):
         "testo": testo,
         "da_testo": top(emo_testo),
         "da_voce": top(emo_audio),
+        "da_voce_grezza": top(emo_audio_grezza),
+        "calibrata": bool(calibra and CALIBRAZIONE_DISPONIBILE),
         "finale": top(combinato),
         "emozione_vh": VH_EMOZIONE.get(top(combinato), "neutral"),
         "punteggi_testo": {k: round(v, 3) for k, v in emo_testo.items()},

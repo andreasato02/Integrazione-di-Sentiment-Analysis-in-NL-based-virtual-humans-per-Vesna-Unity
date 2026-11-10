@@ -38,7 +38,8 @@ def mood_audio():
     """Audio: multipart/form-data con un campo 'audio' (wav, m4a, mp3...).
 
     Campi facoltativi: 'peso_audio' (0-1, default 0.6) e
-    'fusione' ("semplice" o "equa", default "semplice").
+    'fusione' ("semplice" o "equa", default "semplice") e
+    'calibra' ("1" o "0", default "1": corregge la distorsione verso "joy" della voce).
     """
     if "audio" not in request.files:
         return jsonify({"errore": "campo 'audio' mancante"}), 400
@@ -51,6 +52,7 @@ def mood_audio():
         peso = None
     if peso is None or not 0 <= peso <= 1:
         return jsonify({"errore": "'peso_audio' deve essere un numero tra 0 e 1"}), 400
+    calibra = request.form.get("calibra", "1").strip().lower() not in ("0", "false", "no")
     modo = request.form.get("fusione", default="semplice")
     if modo not in MODI_FUSIONE:
         return jsonify({"errore": f"'fusione' deve essere uno di {list(MODI_FUSIONE)}"}), 400
@@ -61,7 +63,7 @@ def mood_audio():
 
     try:
         with lock:
-            r = analizza(percorso, peso_audio=peso, modo=modo)
+            r = analizza(percorso, peso_audio=peso, modo=modo, calibra=calibra)
     except Exception as e:
         return jsonify({"errore": str(e)}), 500
     finally:
@@ -75,6 +77,8 @@ def mood_audio():
         "testo": r["testo"],
         "da_testo": r["da_testo"],
         "da_voce": r["da_voce"],
+        "da_voce_grezza": r["da_voce_grezza"],
+        "calibrata": r["calibrata"],
         "fusione": modo,
         "peso_audio": peso,
         "tutte": r["punteggi_finali"],
