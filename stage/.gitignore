@@ -1,3 +1,9 @@
 
 cache_*.npz
 backup_prima_calibrazione/
+
+# dati scaricati e risultati con frasi di MELD (non ridistribuire)
+bert/*.csv
+# registrazioni salvate da patch_salva_prove.py
+prove/
+*.bak_*

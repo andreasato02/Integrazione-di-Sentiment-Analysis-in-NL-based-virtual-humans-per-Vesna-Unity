@@ -37,8 +37,8 @@ def mood_testo():
 def mood_audio():
     """Audio: multipart/form-data con un campo 'audio' (wav, m4a, mp3...).
 
-    Campi facoltativi: 'peso_audio' (0-1, default 0.6) e
-    'fusione' ("semplice" o "equa", default "semplice") e
+    Campi facoltativi: 'peso_audio' (0-1, default 0.8) e
+    'fusione' ("semplice" o "equa", default "equa") e
     'calibra' ("1" o "0", default "1": corregge la distorsione verso "joy" della voce).
     """
     if "audio" not in request.files:
@@ -47,13 +47,13 @@ def mood_audio():
     f = request.files["audio"]
     ext = os.path.splitext(f.filename or "")[1] or ".wav"
     try:
-        peso = float(request.form.get("peso_audio", 0.6))
+        peso = float(request.form.get("peso_audio", 0.8))
     except ValueError:
         peso = None
     if peso is None or not 0 <= peso <= 1:
         return jsonify({"errore": "'peso_audio' deve essere un numero tra 0 e 1"}), 400
     calibra = request.form.get("calibra", "1").strip().lower() not in ("0", "false", "no")
-    modo = request.form.get("fusione", default="semplice")
+    modo = request.form.get("fusione", default="equa")
     if modo not in MODI_FUSIONE:
         return jsonify({"errore": f"'fusione' deve essere uno di {list(MODI_FUSIONE)}"}), 400
 

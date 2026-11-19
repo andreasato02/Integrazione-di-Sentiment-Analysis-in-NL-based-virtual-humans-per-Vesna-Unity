@@ -50,7 +50,7 @@ def top(d):
     return max(d, key=d.get) if d else None
 
 
-def fondi(emo_testo, emo_audio, peso_audio=0.6, modo="semplice"):
+def fondi(emo_testo, emo_audio, peso_audio=0.8, modo="equa"):
     """Combina i punteggi di testo e voce. Il risultato somma sempre a 1.
 
     "semplice": media pesata delle due distribuzioni. Il testo conosce solo
@@ -82,7 +82,7 @@ def fondi(emo_testo, emo_audio, peso_audio=0.6, modo="semplice"):
     }
 
 
-def analizza(percorso, peso_audio=0.6, modo="semplice", calibra=True):
+def analizza(percorso, peso_audio=0.8, modo="equa", calibra=True):
     testo = asr(
         percorso, generate_kwargs={"language": "italian", "task": "transcribe"}
     )["text"].strip()
