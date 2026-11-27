@@ -2,7 +2,7 @@
 
 Prototipo per rilevare l'emozione con cui un utente parla a un virtual human (VH) in un ambiente di realtà virtuale, così che il VH possa reagire con espressioni facciali e risposte coerenti. Lavoro di stage, in corso.
 
-> **Stato (novembre 2026):** il prototipo audio + testo è completo e collegato a un agente Jason in Unity. D'accordo con la relatrice, la parte audio è ora accantonata (pochi dataset adatti) e il lavoro prosegue sull'emozione dal **testo**: primo passo, la valutazione di `boltuix/bert-emotion` su MELD (vedi sotto).
+> **Stato (novembre 2026):** il prototipo audio + testo è completo e collegato a un agente Jason in Unity. D'accordo con la relatrice, la parte audio è ora accantonata (pochi dataset adatti) e il lavoro prosegue sull'emozione dal **testo**: valutazione di due modelli inglesi (`boltuix/bert-emotion` e `j-hartmann/emotion-english-distilroberta-base`) su MELD, DailyDialog e Emotions dataset (vedi sotto).
 
 ## Cosa fa
 
@@ -170,25 +170,63 @@ python valuta_fusioni.py      # confronta tutte le fusioni sulle prove salvate
 
 `valuta_fusioni.py` chiede di etichettare le registrazioni in `prove/etichette.csv` e non ricarica i modelli.
 
-## Emozioni dal testo: bert-emotion su MELD
+## Emozioni dal testo: confronto di modelli su tre dataset
 
-[`boltuix/bert-emotion`](https://huggingface.co/boltuix/bert-emotion) è un BERT molto piccolo (~11M parametri, 45 MB, inglese, 13 etichette). È valutato sul test set di [MELD](https://affective-meld.github.io/) (2.610 battute di *Friends*, solo testo, ogni frase senza il contesto del dialogo).
+`bert/valuta_bert.py` valuta un modello di emozioni dal testo (inglese) su uno di tre dataset, frase per frase e senza il contesto del dialogo. Misura emozioni e sentiment (accuratezza, UAR, F1 pesata, richiamo per classe, matrice di confusione) e il tempo per frase.
+
+**Modelli**
+
+- [`j-hartmann/emotion-english-distilroberta-base`](https://huggingface.co/j-hartmann/emotion-english-distilroberta-base) (default): DistilRoBERTa, 7 etichette (le stesse di MELD). Addestrato su 6 dataset, **tra cui MELD e l'Emotions dataset**.
+- [`boltuix/bert-emotion`](https://huggingface.co/boltuix/bert-emotion): BERT molto piccolo (~11M parametri, 45 MB), 13 etichette. Addestrato **sull'Emotions dataset**.
+
+**Dataset**
+
+| Dataset | Testo | Emozioni | Sentiment |
+|---|---|---|---|
+| `meld` | 2.610 battute di *Friends* (test set) | 7 | annotato (3 classi) |
+| `dailydialog` | 7.740 turni di dialoghi quotidiani scritti (test set) | 7, come MELD (82% neutral) | ricavato dall'emozione, surprise esclusa |
+| `emotion` | 2.000 frasi tipo blog/tweet (test set) | 6, con love e senza neutral | polarità ricavata dall'emozione, surprise esclusa |
+
+DailyDialog è l'unico dei tre che nessuno dei due modelli ha visto in addestramento, quindi è il confronto più affidabile. I risultati su MELD e soprattutto sull'Emotions dataset sono ottimistici.
 
 ```bash
 cd bert
+# MELD
 curl -L -o test_sent_emo.csv https://raw.githubusercontent.com/declare-lab/MELD/master/data/MELD/test_sent_emo.csv
-python valuta_bert.py
+# DailyDialog (il link ufficiale http://yanran.li/files/ijcnlp_dailydialog.zip non funziona più: copia su Hugging Face)
+curl -L -o dd.zip https://huggingface.co/datasets/roskoN/dailydialog/resolve/main/test.zip
+unzip -j dd.zip test/dialogues_test.txt test/dialogues_emotion_test.txt -d dailydialog
+# Emotions dataset: test.txt da Kaggle ("Emotions dataset for NLP"), da mettere in bert/
+
+python valuta_bert.py --dataset dailydialog                       # modello di default (j-hartmann)
+python valuta_bert.py --dataset meld --modello boltuix/bert-emotion
+python valuta_bert.py --dataset emotion --n 300                   # prova veloce
 ```
 
-Le 13 etichette sono ridotte alle 7 di MELD (love, desire → joy; shame, guilt → sadness; confusion → surprise; sarcasm → neutral: scelta modificabile in `A_MELD`). Il sentiment è ricavato dalle stesse probabilità.
+Le etichette dei modelli sono ridotte a quelle del dataset (per boltuix: love, desire → joy su MELD/DailyDialog e → love sull'Emotions dataset; shame, guilt → sadness; confusion → surprise; sarcasm → neutral, ignorato dove neutral non esiste). Le predizioni sono salvate in `risultati_<modello>_<dataset>.csv`.
 
-| | Accuratezza | UAR | F1 pesata |
+**Risultati sulle emozioni** (accuratezza / UAR)
+
+| Dataset | Sempre la classe più frequente | boltuix | j-hartmann |
 |---|---|---|---|
-| Emozioni (7) | 44,6% | 27,3% | 42,4% |
-| Sentiment (3) | 50,9% | 48,5% | 48,9% |
-| Sempre "neutral" | 48,1% | 14,3% / 33,3% | |
+| **DailyDialog** (non visto) | 81,7% (neutral) | 56,1% / 40,4% | **61,1% / 52,1%** |
+| MELD (visto da j-hartmann) | 48,1% (neutral) | 44,6% / 27,3% | 49,8% / 39,4% |
+| Emotions dataset (visto da entrambi) | 34,8% (joy) | 94,7% / 93,5% | 84,0% / 73,9% |
 
-Richiamo per emozione: neutral 60%, joy 60%, surprise 42%, sadness 14%, disgust 7%, anger 7%, fear 2%. Delle 345 frasi arrabbiate, 67 sono classificate `joy`. Velocità: mediana 2,9 ms per frase (MacBook Air M2), quindi adatto al tempo reale ma poco preciso; il negativo è il punto debole anche nel sentiment.
+**Risultati sul sentiment** (accuratezza / UAR)
+
+| Dataset | boltuix | j-hartmann |
+|---|---|---|
+| DailyDialog (3 classi) | 67,1% / 63,6% | 65,2% / 65,8% |
+| MELD (3 classi) | 50,9% / 48,5% | 60,7% / 57,8% |
+| Emotions dataset (2 classi) | 99,5% / 99,5% | 95,3% / 94,9% |
+
+Osservazioni:
+
+- **DailyDialog:** j-hartmann riconosce molto meglio le emozioni minori (anger 32% contro 14%, disgust 49% contro 19%, surprise 80% contro 52%) e scambia meno spesso il neutro per joy (richiamo di neutral 64% contro 54%), ma riconosce meno joy (45% contro 78%). Entrambi restano sotto chi risponde sempre "neutral": il problema principale è che danno un'emozione a frasi neutre. Nel sentiment j-hartmann trova molto meglio il negativo (81% contro 46%), boltuix il positivo (79% contro 49%).
+- **MELD:** boltuix va peggio di chi risponde sempre "neutral"; delle 345 frasi arrabbiate, 67 le classifica `joy`.
+- **Emotions dataset:** il 94,7% di boltuix riflette l'addestramento sullo stesso dataset. j-hartmann non ha la classe love (richiamo 0%, finisce quasi tutta in joy).
+- **Velocità** (MacBook Air M2, mediana per frase): boltuix ~3 ms, j-hartmann ~7 ms. Entrambi adatti al tempo reale.
 
 ## File
 
@@ -199,7 +237,7 @@ Richiamo per emozione: neutral 60%, joy 60%, surprise 42%, sadness 14%, disgust 
 | `valuta.py` | Valutazione su `casi.csv`, produce `risultati.csv` |
 | `patch_salva_prove.py` | Fa salvare a `analizza_audio.py` ogni analisi in `prove/` |
 | `valuta_fusioni.py` | Confronta fusioni e pesi sulle prove salvate, senza ricaricare i modelli |
-| `bert/valuta_bert.py` | Valuta `bert-emotion` sul test set di MELD (emozioni, sentiment, tempi) |
+| `bert/valuta_bert.py` | Valuta un modello di emozioni dal testo su MELD, DailyDialog o Emotions dataset (emozioni, sentiment, tempi) |
 | `valuta_emozionalmente.py` | Valutazione del modello vocale su un campione di Emozionalmente |
 | `calibra_emozionalmente.py` | Addestra la correzione della voce e la confronta con il modello originale |
 | `calibrazione_voce.py` | Applica la correzione (legge `calibrazione.npz`) |
@@ -215,9 +253,13 @@ Richiamo per emozione: neutral 60%, joy 60%, surprise 42%, sadness 14%, disgust 
 - Il modello di testo (FEEL-it) è il punto debole: non ha la classe "neutro" e tende a rispondere `sadness` anche con alta confidenza. La correzione riguarda solo la voce.
 - Il peso testo/voce (equa, 0,8) è scelto su poche registrazioni di una sola persona.
 - Il codice di integrazione con Unity/Jason (messaggio `mood`, piani dell'agente, registrazione dal microfono) è nel progetto VEsNA-Unity locale, non in questo repository.
-- `bert-emotion` e MELD sono in inglese, mentre l'utente del VH parlerà italiano.
+- I modelli di testo valutati e i tre dataset sono in inglese, mentre l'utente del VH parlerà italiano.
+- Sul testo, l'unico confronto su dati mai visti dai modelli è DailyDialog, che è scritto e non parlato.
 
 ## Riferimenti
 
 - S. Poria et al., *MELD: A Multimodal Multi-Party Dataset for Emotion Recognition in Conversations*, ACL 2019.
+- Y. Li et al., *DailyDialog: A Manually Labelled Multi-turn Dialogue Dataset*, IJCNLP 2017 (CC BY-NC-SA 4.0).
+- E. Saravia et al., *CARER: Contextualized Affect Representations for Emotion Recognition*, EMNLP 2018 (Emotions dataset).
+- J. Hartmann, *Emotion English DistilRoBERTa-base*, https://huggingface.co/j-hartmann/emotion-english-distilroberta-base/, 2022.
 - F. Catania, J. W. Wilke, F. Garzotto, *Emozionalmente: A Crowdsourced Corpus of Simulated Emotional Speech in Italian*, IEEE Transactions on Audio, Speech and Language Processing, vol. 33, 2025. DOI 10.1109/TASLPRO.2025.3540662. Dataset: DOI 10.5281/zenodo.12616095 (CC BY 4.0). La correzione della voce è addestrata su questo dataset.

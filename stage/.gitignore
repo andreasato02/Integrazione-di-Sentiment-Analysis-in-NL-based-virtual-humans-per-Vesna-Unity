@@ -7,3 +7,6 @@ bert/*.csv
 # registrazioni salvate da patch_salva_prove.py
 prove/
 *.bak_*
+# altri dataset di testo (si scaricano, vedi README)
+bert/*.txt
+bert/dailydialog/
